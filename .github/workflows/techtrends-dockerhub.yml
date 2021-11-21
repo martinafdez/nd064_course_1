@@ -1,3 +1,4 @@
+name: TechTrends - package with Docker
 on:
   push:
     branches: [ master ]
@@ -28,8 +29,8 @@ jobs:
         name: Build and push
         uses: docker/build-push-action@v2
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./project
+          file: ../Dockerfile
           platforms: linux/amd64
           push: true
           tags: martinafdez/techtrends:latest
