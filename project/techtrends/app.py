@@ -2,13 +2,33 @@ import sqlite3
 
 from flask import Flask, jsonify, json, render_template, request, url_for, redirect, flash
 from werkzeug.exceptions import abort
+import logging
+
+logging.basicConfig(
+format='%(asctime)s %(levelname)-8s %(message)s',
+level=logging.INFO,
+datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(filename='techTrendsLogs.log', encoding='utf-8', level=logging.DEBUG)
+
 
 # Function to get a database connection.
 # This function connects to database with the name `database.db`
+db_connection_counter = 0
 def get_db_connection():
+    global db_connection_counter
     connection = sqlite3.connect('database.db')
     connection.row_factory = sqlite3.Row
+    db_connection_counter += 1
     return connection
+
+
+# This function returns all the posts from `database.db`
+def get_total_posts_from_database():
+    connection = get_db_connection()
+    total_posts = connection.execute('SELECT * FROM posts').fetchall()
+    connection.close()
+    return total_posts
+
 
 # Function to get a post using its ID
 def get_post(post_id):
@@ -22,7 +42,7 @@ def get_post(post_id):
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your secret key'
 
-# Define the main route of the web application 
+# Define the main route of the web application
 @app.route('/')
 def index():
     connection = get_db_connection()
@@ -30,22 +50,53 @@ def index():
     connection.close()
     return render_template('index.html', posts=posts)
 
-# Define how each individual article is rendered 
+
+# Define the health check of the web application
+@app.route('/healthcheck')
+def healthCheck():
+    healthcheck_response = app.response_class(
+            response=json.dumps({"result":"OK - healthy"}),
+            status=200,
+            mimetype='application/json'
+    )
+
+    app.logger.info('Health check returned successfully')
+    return healthcheck_response
+
+
+# Define the metrics of the web application
+@app.route('/metrics')
+def metrics():
+    metrics_response = app.response_class(
+            response=json.dumps({"db_connection_count": db_connection_counter,
+                                 "post_count": len(get_total_posts_from_database())}),
+            status=200,
+            mimetype='application/json'
+    )
+
+    app.logger.info('Metrics returned successfully')
+    return metrics_response
+
+
+# Define how each individual article is rendered
 # If the post ID is not found a 404 page is shown
 @app.route('/<int:post_id>')
 def post(post_id):
     post = get_post(post_id)
     if post is None:
+      logging.error("404 article not found.")
       return render_template('404.html'), 404
     else:
+      logging.info("article found = " + post)
       return render_template('post.html', post=post)
 
 # Define the About Us page
 @app.route('/about')
 def about():
+    logging.info("About us page accessed.")
     return render_template('about.html')
 
-# Define the post creation functionality 
+# Define the post creation functionality
 @app.route('/create', methods=('GET', 'POST'))
 def create():
     if request.method == 'POST':
@@ -60,7 +111,7 @@ def create():
                          (title, content))
             connection.commit()
             connection.close()
-
+            logging.info("New article created, with the title = " + title)
             return redirect(url_for('index'))
 
     return render_template('create.html')
